@@ -2,4 +2,4 @@ flask
 requests
 google-genai
 gunicorn
-beatifulsoup4
+beautifulsoup4
