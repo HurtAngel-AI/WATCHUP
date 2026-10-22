@@ -798,6 +798,30 @@
             dlAnchor.setAttribute("download", `webos_backup_${sessionData.username}.json`);
             dlAnchor.click();
         }
+        async function askGemini() {
+            const input = document.getElementById("ai-input");
+            const prompt = input.value.trim();
+            if (!prompt) return;
+
+            const chatBox = document.getElementById("ai-chat-box");
+            chatBox.innerHTML += `<div style="color: white; margin-bottom: 6px;"><b>Sen:</b> ${prompt}</div>`;
+            input.value = "";
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            const res = await fetch('/api/ai/ask', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ prompt: prompt })
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+                chatBox.innerHTML += `<div style="color: var(--accent); margin-bottom: 6px;"><b>Gemini:</b> ${data.response}</div>`;
+            } else {
+                chatBox.innerHTML += `<div style="color: var(--danger); margin-bottom: 6px;"><b>Hata:</b> ${data.message}</div>`;
+            }
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
     </script>
 </body>
 </html>
