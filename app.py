@@ -189,7 +189,31 @@ def proxy_engine():
 @app.route("/")
 def index():
     return render_template("index.html")
+# ---------------------------------------------------------------------------
+# GEMINI AI ASİSTAN ENTEGRASYON APİ'Sİ
+# ---------------------------------------------------------------------------
+@app.route("/api/ai/ask", methods=["POST"])
+def api_ai_ask():
+    data = request.get_json() or {}
+    prompt = data.get("prompt", "").strip()
+    
+    if not prompt:
+        return jsonify({"status": "error", "message": "Mesaj boş olamaz."}), 400
 
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return jsonify({"status": "error", "message": "Gemini API Key henüz tanımlanmadı."}), 500
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+        return jsonify({"status": "success", "response": response.text})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Gemini Hatası: {str(e)}"}), 500
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
