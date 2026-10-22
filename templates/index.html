@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Web OS Platform</title>
+    <style>
+        :root {
+            --bg-wallpaper: url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000&auto=format&fit=crop');
+            --primary: #6c5ce7;
+            --primary-dark: #4834d4;
+            --accent: #00cec9;
+            --danger: #ff7675;
+            --warning: #fdcb6e;
+            --success: #00b894;
+            --glass-bg: rgba(20, 20, 30, 0.82);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --text-main: #ffffff;
+            --text-muted: #a0a0b0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: #09090e var(--bg-wallpaper) center/cover no-repeat fixed;
+            color: var(--text-main);
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* TOP STATUS BAR */
+        .top-bar {
+            height: 34px;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 14px;
+            font-size: 0.8rem;
+            z-index: 1000;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .status-badge {
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            background: var(--primary);
+            letter-spacing: 0.3px;
+        }
+
+        .timer-badge {
+            background: var(--warning);
+            color: #111;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            box-shadow: 0 0 10px rgba(253, 203, 110, 0.3);
+        }
+
+        /* DESKTOP ICON GRID */
+        .desktop {
+            flex: 1;
+            padding: 22px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            grid-auto-rows: 96px;
+            gap: 18px;
+            align-content: start;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        /* SQUIRCLE / KÖŞELERİ YUMUŞATILMIŞ KARE UYGULAMA İKONLARI */
+        .app-icon {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border-radius: 22px;
+            padding: 6px;
+        }
+
+        .app-icon:hover {
+            transform: translateY(-4px) scale(1.05);
+        }
+
+        .app-icon:active {
+            transform: scale(0.92);
+        }
+
+        .app-icon .icon-img {
+            width: 58px;
+            height: 58px;
+            border-radius: 18px; /* Squircle yumuşatılmış kare tasarımı */
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .app-icon .icon-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-top: 7px;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.9);
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+        }
+
+        .app-icon.locked .icon-img::after {
+            content: '🔒';
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            font-size: 0.85rem;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 50%;
+            padding: 2px 4px;
+            border: 1px solid var(--glass-border);
+        }
+
+        /* WINDOW / MODAL MİMARİSİ */
+        .window {
+            position: absolute;
+            top: 34px;
+            left: 0;
+            width: 100vw;
+            height: calc(100vh - 34px);
+            background: var(--glass-bg);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.93) translateY(20px);
+            transition: transform 0.3s cubic-bezier(0.1, 0.9, 0.2, 1), opacity 0.3s ease;
+        }
+
+        .window.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1) translateY(0);
+        }
+
+        .window-header {
+            height: 46px;
+            background: rgba(0, 0, 0, 0.45);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .window-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .close-btn {
+            background: var(--danger);
+            border: none;
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+
+        .close-btn:active {
+            transform: scale(0.85);
+        }
+
+        .window-body {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+        }
+
+        /* FORM BİLEŞENLERİ */
+        input, select, button, textarea {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+            background: rgba(0, 0, 0, 0.55);
+            color: white;
+            margin-bottom: 12px;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--primary);
+        }
+
+        button {
+            background: var(--primary);
+            border: none;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            filter: brightness(1.1);
+        }
+
+        button:active {
+            transform: scale(0.97);
+        }
+
+        /* CARD / CONTAINER BOX */
+        .box {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 14px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        /* CHAT MESSAGE BUBBLES */
+        .chat-bubble {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .chat-bubble.me {
+            background: var(--primary-dark);
+            align-self: flex-end;
+        }
+
+        /* SÜRE DOLDU KİLİT PERDESİ (BANKA HARİÇ) */
+        #lock-overlay {
+            position: fixed;
+            top: 34px;
+            left: 0;
+            width: 100vw;
+            height: calc(100vh - 34px);
+            background: rgba(5, 5, 12, 0.88);
+            backdrop-filter: blur(28px);
+            -webkit-backdrop-filter: blur(28px);
+            z-index: 990;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            text-align: center;
+        }
+
+        #lock-overlay.hidden {
+            display: none;
+        }
+
+        /* TRAP-DOOR GİRİŞ MODALI */
+        #auth-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #09090e;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .pass-digits {
+            display: flex;
+            gap: 8px;
+            margin: 18px 0;
+        }
+
+        .pass-digit-box {
+            width: 34px;
+            height: 44px;
+            border: 1.5px solid var(--primary);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            font-weight: 700;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--accent);
+        }
+
+        /* AKILLI SAAT VE MOBİL EKAN SİMÜLASYONU VE UYUMU */
+        @media (max-width: 320px) {
+            .desktop {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+                padding: 12px;
+            }
+            .app-icon .icon-img {
+                width: 50px;
+                height: 50px;
+                border-radius: 15px;
+                font-size: 1.5rem;
+            }
+            .window-header {
+                height: 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- TOP STATUS BAR -->
+    <div class="top-bar">
+        <span id="user-tag-display" class="status-badge">Bağlanıyor...</span>
+        <span id="timer-display" class="timer-badge">10:00</span>
+        <span id="clock-display">00:00</span>
+    </div>
+
+    <!-- DESKTOP GRID -->
+    <div class="desktop">
+        <!-- BANK APP (SÜRE BİTSE BİLE AÇILABİLEN TEK UYGULAMA) -->
+        <div class="app-icon" style="z-index: 1000;" onclick="openApp('bank')">
+            <div class="icon-img" style="background: linear-gradient(135deg, #4834d4, #6c5ce7);">🏦</div>
+            <div class="icon-label">Banka</div>
+        </div>
+
+        <div class="app-icon" onclick="openApp('proxweb')">
+            <div class="icon-img" style="background: linear-gradient(135deg, #00cec9, #0984e3);">🌐</div>
+            <div class="icon-label">ProxWeb</div>
+        </div>
+
+        <div class="app-icon" onclick="openApp('store')">
+            <div class="icon-img" style="background: linear-gradient(135deg, #fdcb6e, #e17055);">🛍️</div>
+            <div class="icon-label">AppCenter</div>
+        </div>
+
+        <div class="app-icon" onclick="openApp('chat')">
+            <div class="icon-img" style="background: linear-gradient(135deg, #00b894, #00cec9);">💬</div>
+            <div class="icon-label">ChatApp</div>
+        </div>
+
+        <div class="app-icon" onclick="openApp('music')">
+            <div class="icon-img" style="background: linear-gradient(135deg, #ff7675, #d63031);">🎵</div>
+            <div class="icon-label">WebMusic</div>
+        </div>
+
+        <div class="app-icon" onclick="openApp('gemini')">
+            <div class="icon-img" style="background: linear-gradient(135deg, #a29bfe, #6c5ce7);">🤖</div>
+            <div class="icon-label">Gemini AI</div>
+        </div>
+
+        <div class="app-icon" onclick="openApp('settings')">
+            <div class="icon-img" style="background: linear-gradient(135deg, #636e72, #2d3436);">⚙️</div>
+            <div class="icon-label">Ayarlar</div>
+        </div>
+
+        <!-- SUPER ADMIN PANEL APP (GİZLİ - YALNIZCA SUPER_ADMIN CİHAZDA GÖRÜNÜR) -->
+        <div id="admin-icon" class="app-icon" style="display: none;" onclick="openApp('admin')">
+            <div class="icon-img" style="background: linear-gradient(135deg, #d63031, #2d3436); border: 1px solid var(--danger);">👑</div>
+            <div class="icon-label">Admin Panel</div>
+        </div>
+    </div>
+
+    <!-- SÜRE DOLDU KİLİT DUVARI OVERLAY -->
+    <div id="lock-overlay" class="hidden">
+        <h2 style="color: var(--danger); margin-bottom: 10px;">⚠️ Kullanım Süreniz Doldu</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 18px; max-width: 320px;">
+            10 dakikalık ücretsiz deneme süreniz sona erdi. Kilitleri açıp kullanıma devam etmek için lütfen Banka uygulamasını açarak paketinizi yenileyin.
+        </p>
+        <button onclick="openApp('bank')" style="max-width: 260px; background: var(--success); color: black; padding: 14px; font-size: 1rem;">
+            🏦 Banka Uygulamasını Aç & Paket Al
+        </button>
+    </div>
+
+    <!-- TRAP-DOOR AUTHENTICATION MODAL -->
+    <div id="auth-modal">
+        <h2 style="color: var(--accent);">🔓 Web OS Cihaz Girişi</h2>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;">Cihaz Şifrenizi Girin</p>
+        
+        <div class="pass-digits" id="digit-container"></div>
+
+        <input type="password" id="device-pass-input" placeholder="Şifre" style="max-width: 220px; text-align: center; letter-spacing: 4px;" oninput="handlePassInput(this)">
+        <button onclick="submitAuth()" style="max-width: 220px;">Sisteme Giriş Yap</button>
+    </div>
+
+    <!-- WINDOW 1: BANK APP -->
+    <div id="win-bank" class="window">
+        <div class="window-header">
+            <div class="window-title">🏦 Banka & Ödeme Bağlantısı</div>
+            <button class="close-btn" onclick="closeApp('bank')">✕</button>
+        </div>
+        <div class="window-body">
+            <div class="box">
+                <small style="color: var(--text-muted);">Canlı Banka Bakiyesi</small>
+                <h2 id="bank-live-balance" style="color: var(--success); font-size: 1.8rem; margin: 4px 0;">0.00 ₺</h2>
+                <button onclick="fetchBankBalance()" style="padding: 6px 12px; font-size: 0.75rem; background: #333; width: auto;">🔄 Bakiyeyi Yenile</button>
+            </div>
+
+            <div class="box">
+                <h3>💳 Banka Kartını Cihaza Bağla</h3>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 10px;">1. Sunucudaki (Dekontika) sanal kart bilgilerinizi girin:</p>
+                <input type="text" id="link-card-no" placeholder="Kart Numarası (4444 **** **** ****)">
+                <input type="text" id="link-skt" placeholder="SKT (12/28)">
+                <input type="text" id="link-cvv" placeholder="CVV (123)">
+                <button onclick="linkBankCard()" style="background: var(--accent); color: black;">Kartı Cihaza Eşleştir</button>
+            </div>
+
+            <div class="box">
+                <h3>📦 Okul Abonelik Paketleri</h3>
+                <button onclick="buySubscription('TENEFFUS')" style="background: #2a2a40; text-align: left; padding: 12px;">⚡ Teneffüs Paketi (30 Dk) — <b>45 ₺ / Gün</b></button>
+                <button onclick="buySubscription('STANDART')" style="background: #2a2a40; text-align: left; padding: 12px;">⭐ Standart Paket (1 Saat) — <b>55 ₺ / Gün</b></button>
+                <button onclick="buySubscription('UZUN')" style="background: #2a2a40; text-align: left; padding: 12px;">🚀 Uzun Paket (2 Saat) — <b>60 ₺ / Gün</b></button>
+                <button onclick="buySubscription('VIP')" style="background: linear-gradient(135deg, #f1c40f, #e67e22); color: black; text-align: left; padding: 12px;">👑 VIP Paket (Sınırsız 7/24) — <b>80 ₺ / Gün</b></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WINDOW 2: PROXWEB -->
+    <div id="win-proxweb" class="window">
+        <div class="window-header">
+            <div class="window-title">🌐 ProxWeb (Filtresiz Tarayıcı)</div>
+            <button class="close-btn" onclick="closeApp('proxweb')">✕</button>
+        </div>
+        <div class="window-body" style="padding: 0; display: flex; flex-direction: column;">
+            <div style="padding: 8px; background: rgba(0,0,0,0.6); display: flex; gap: 8px; border-bottom: 1px solid var(--glass-border);">
+                <input type="text" id="proxy-url-input" placeholder="https://google.com" style="margin: 0;">
+                <button onclick="loadProxyUrl()" style="width: 80px; margin: 0; background: var(--accent); color: black;">Git</button>
+            </div>
+            <iframe id="proxy-frame" style="flex: 1; border: none; background: white;"></iframe>
+        </div>
+    </div>
+
+    <!-- WINDOW 3: APPCENTER -->
+    <div id="win-store" class="window">
+        <div class="window-header">
+            <div class="window-title">🛍️ AppCenter (Uygulama Mağazası)</div>
+            <button class="close-btn" onclick="closeApp('store')">✕</button>
+        </div>
+        <div class="window-body">
+            <div class="box" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <b>🎵 TikTok App</b>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Tünellenmiş Reels & Video Akışı</div>
+                </div>
+                <button style="width: auto; padding: 8px 14px; font-size: 0.8rem; background: var(--success); color: black;">15 ₺ İndir</button>
+            </div>
+
+            <div class="box" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <b>📸 Instagram</b>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Filtsiz Sosyal Medya</div>
+                </div>
+                <button style="width: auto; padding: 8px 14px; font-size: 0.8rem; background: var(--success); color: black;">20 ₺ İndir</button>
+            </div>
+
+            <div class="box" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <b>▶️ YouTube</b>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Sınırsız Video İzleme</div>
+                </div>
+                <button style="width: auto; padding: 8px 14px; font-size: 0.8rem; background: var(--success); color: black;">15 ₺ İndir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WINDOW 4: CHATAPP -->
+    <div id="win-chat" class="window">
+        <div class="window-header">
+            <div class="window-title">💬 ChatApp & DM (#TAG)</div>
+            <button class="close-btn" onclick="closeApp('chat')">✕</button>
+        </div>
+        <div class="window-body" style="display: flex; flex-direction: column;">
+            <div id="chat-messages-container" class="box" style="flex: 1; overflow-y: auto; margin-bottom: 10px;">
+                <div class="chat-bubble"><b>Sistem:</b> ChatApp'e hoş geldiniz. Kullanıcılarla anlık sohbet edebilirsiniz.</div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="chat-input" placeholder="Mesajınızı yazın..." style="margin: 0;">
+                <button onclick="sendChatMessage()" style="width: 80px; margin: 0;">Gönder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WINDOW 5: WEBMUSIC -->
+    <div id="win-music" class="window">
+        <div class="window-header">
+            <div class="window-title">🎵 WebMusic (YouTube Stream)</div>
+            <button class="close-btn" onclick="closeApp('music')">✕</button>
+        </div>
+        <div class="window-body">
+            <div class="box">
+                <h3>🔍 Arka Planda Müzik Dinle</h3>
+                <input type="text" id="music-search-input" placeholder="Şarkı veya sanatçı adı yazın...">
+                <button style="background: var(--primary);">Müzik Ara & Oynat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WINDOW 6: GEMINI AI -->
+    <div id="win-gemini" class="window">
+        <div class="window-header">
+            <div class="window-title">🤖 Gemini AI Asistanı</div>
+            <button class="close-btn" onclick="closeApp('gemini')">✕</button>
+        </div>
+        <div class="window-body" style="display: flex; flex-direction: column;">
+            <div id="ai-chat-box" style="flex: 1; overflow-y: auto; margin-bottom: 10px;" class="box">
+                <div style="color: var(--accent); margin-bottom: 6px;"><b>Gemini:</b> Merhaba! Derslerin, ödevlerin veya soruların için yardımcı olmaya hazırım.</div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="ai-input" placeholder="Soru sorun..." style="margin: 0;">
+                <button onclick="askGemini()" style="width: 80px; margin: 0; background: var(--primary);">Sor</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WINDOW 7: SETTINGS -->
+    <div id="win-settings" class="window">
+        <div class="window-header">
+            <div class="window-title">⚙️ Sistem Ayarları</div>
+            <button class="close-btn" onclick="closeApp('settings')">✕</button>
+        </div>
+        <div class="window-body">
+            <div class="box">
+                <h3>🖼️ Duvar Kağıdı Özelleştirme</h3>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">WearOS kısıtlamaları nedeniyle web üzerinden görsel bağlantısı yapıştırın:</p>
+                <input type="text" id="wallpaper-url-input" placeholder="Görsel URL Bağlantısı Yapıştırın">
+                <button onclick="changeWallpaper()">Duvar Kağıdını Değiştir</button>
+            </div>
+
+            <div class="box">
+                <h3>💾 RAM Verilerini Dışa Aktar (Export)</h3>
+                <button onclick="exportUserData()" style="background: var(--success); color: black;">JSON Geçmişimi Bilgisayara İndir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WINDOW 8: SUPER ADMIN PANEL -->
+    <div id="win-admin" class="window">
+        <div class="window-header">
+            <div class="window-title">👑 Super Admin Kontrol Paneli</div>
+            <button class="close-btn" onclick="closeApp('admin')">✕</button>
+        </div>
+        <div class="window-body">
+            <div class="box">
+                <h3>📢 Global Ekran Bildirimi (Broadcast)</h3>
+                <input type="text" id="admin-broadcast-msg" placeholder="Tüm kullanıcıların ekranına düşecek bildirim...">
+                <button style="background: var(--warning); color: black;">Tüm Ekranlara Gönder</button>
+            </div>
+
+            <div class="box">
+                <h3>📂 RAM Veritabanı Geri Yükle (Import / Restore)</h3>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">Sadece Super Admin veritabanı yedeği yükleyebilir:</p>
+                <input type="file" id="admin-json-file" accept=".json">
+                <button style="background: var(--danger);">JSON Yedeğini RAM'e Restore Et</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentDeviceHash = null;
+        let sessionData = null;
+        let timerInterval = null;
+
+        window.onload = async () => {
+            currentDeviceHash = await generateFingerprint();
+            updateClock();
+            setInterval(updateClock, 1000);
+            initPasscodeBox(4);
+        };
+
+        // CANVAS & GPU DONANIM PARMAK İZİ SÜRÜCÜSÜ (DEVICE_HASH)
+        async function generateFingerprint() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.textBaseline = "top";
+            ctx.font = "14px 'Arial'";
+            ctx.fillText("WEB_OS_HARDWARE_FINGERPRINT", 2, 2);
+            
+            const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+            const gpu = gl ? gl.getParameter(gl.RENDERER) : "NO_GPU";
+            
+            const rawStr = `${navigator.userAgent}_${screen.width}x${screen.height}_${navigator.hardwareConcurrency}_${gpu}_${canvas.toDataURL()}`;
+            
+            const msgBuffer = new TextEncoder().encode(rawStr);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function initPasscodeBox(count) {
+            const container = document.getElementById("digit-container");
+            container.innerHTML = "";
+            for(let i = 0; i < count; i++) {
+                container.innerHTML += `<div class="pass-digit-box">*</div>`;
+            }
+        }
+
+        function handlePassInput(input) {
+            const val = input.value;
+            // 4564 YAZILDINDA ŞİFRE KUTUSU DİNAMİK OLARAK 9 HANEYE UZAR
+            if (val === "4564" && input.maxLength !== 9) {
+                input.maxLength = 9;
+                initPasscodeBox(9);
+            }
+        }
+
+        async function submitAuth() {
+            const pass = document.getElementById("device-pass-input").value;
+            const res = await fetch('/api/auth/init', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ device_hash: currentDeviceHash, password: pass })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                sessionData = data.data || data.session;
+                document.getElementById("auth-modal").style.display = "none";
+                document.getElementById("user-tag-display").innerText = sessionData.username + sessionData.tag;
+                
+                if (sessionData.is_admin) {
+                    document.getElementById("admin-icon").style.display = "flex";
+                }
+
+                startTrialTimer();
+                fetchBankBalance();
+            } else {
+                alert(data.message || "Giriş başarısız!");
+            }
+        }
+
+        function startTrialTimer() {
+            let leftSeconds = sessionData.trial_left_seconds || 600;
+            
+            timerInterval = setInterval(() => {
+                if (sessionData.plan === "VIP" || sessionData.is_admin) {
+                    document.getElementById("timer-display").innerText = "VIP Sınırsız";
+                    document.getElementById("timer-display").style.background = "var(--success)";
+                    document.getElementById("lock-overlay").classList.add("hidden");
+                    return;
+                }
+
+                if (leftSeconds <= 0) {
+                    document.getElementById("timer-display").innerText = "SÜRE DOLDU";
+                    document.getElementById("timer-display").style.background = "var(--danger)";
+                    document.getElementById("lock-overlay").classList.remove("hidden");
+                    clearInterval(timerInterval);
+                    return;
+                }
+
+                leftSeconds--;
+                const m = Math.floor(leftSeconds / 60).toString().padStart(2, '0');
+                const s = (leftSeconds % 60).toString().padStart(2, '0');
+                document.getElementById("timer-display").innerText = `${m}:${s}`;
+            }, 1000);
+        }
+
+        // PENCERE YÖNETİCİSİ (WINDOW MANAGER)
+        function openApp(appId) {
+            const isLockActive = !document.getElementById("lock-overlay").classList.contains("hidden");
+            // SÜRE BİTTİĞİNDE BANKA HARİÇ TÜM UYGULAMALAR ENGELLENİR
+            if (isLockActive && appId !== 'bank') {
+                alert("Süreniz dolduğu için yalnızca Banka uygulamasını açabilirsiniz!");
+                return;
+            }
+
+            const win = document.getElementById(`win-${appId}`);
+            if (win) win.classList.add("active");
+        }
+
+        function closeApp(appId) {
+            const win = document.getElementById(`win-${appId}`);
+            if (win) win.classList.remove("active");
+        }
+
+        // BANKA VE ABONELİK İŞLEMLERİ
+        async function fetchBankBalance() {
+            try {
+                const res = await fetch('/api/bank/balance', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ device_hash: currentDeviceHash })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    document.getElementById("bank-live-balance").innerText = data.bakiye.toFixed(2) + " ₺";
+                }
+            } catch (err) {}
+        }
+
+        async function linkBankCard() {
+            const res = await fetch('/api/bank/link', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    device_hash: currentDeviceHash,
+                    kart_no: document.getElementById("link-card-no").value,
+                    skt: document.getElementById("link-skt").value,
+                    cvv: document.getElementById("link-cvv").value
+                })
+            });
+            const data = await res.json();
+            alert(data.message);
+            if (res.ok) fetchBankBalance();
+        }
+
+        async function buySubscription(plan) {
+            const res = await fetch('/api/bank/subscribe', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ device_hash: currentDeviceHash, plan: plan })
+            });
+            const data = await res.json();
+            alert(data.message);
+            if (res.ok) {
+                sessionData.plan = plan;
+                document.getElementById("lock-overlay").classList.add("hidden");
+                fetchBankBalance();
+            }
+        }
+
+        // PROXWEB
+        function loadProxyUrl() {
+            const url = document.getElementById("proxy-url-input").value;
+            if (!url) return;
+            document.getElementById("proxy-frame").src = `/proxy?url=${encodeURIComponent(url)}&device_hash=${currentDeviceHash}`;
+        }
+
+        // CHATAPP
+        function sendChatMessage() {
+            const input = document.getElementById("chat-input");
+            if (!input.value.trim()) return;
+            const container = document.getElementById("chat-messages-container");
+            container.innerHTML += `<div class="chat-bubble me"><b>${sessionData.username}:</b> ${input.value}</div>`;
+            input.value = "";
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // WALLPAPER & DUVAR KAĞIDI
+        function changeWallpaper() {
+            const url = document.getElementById("wallpaper-url-input").value;
+            if (url) document.body.style.backgroundImage = `url('${url}')`;
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById("clock-display").innerText = now.toTimeString().substring(0, 5);
+        }
+
+        // JSON EXPORT
+        function exportUserData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(sessionData));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", `webos_backup_${sessionData.username}.json`);
+            dlAnchor.click();
+        }
+    </script>
+</body>
+</html>
