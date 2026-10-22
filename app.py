@@ -1,41 +1,42 @@
 import os
 import json
 import uuid
-import hashlib
 import requests
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response
 
 app = Flask(__name__)
 
 # ---------------------------------------------------------------------------
 # YAPILANDIRMA & IN-MEMORY (RAM) DATABASE
 # ---------------------------------------------------------------------------
-# 1. Sunucunun (Banka) Render URL'si
-BANK_SERVER_URL = os.getenv("BANK_SERVER_URL", "https://sanal-banka.onrender.com")
+# Render üzerindeki 1. Sunucu (Banka) adresi
+BANK_SERVER_URL = os.getenv("BANK_SERVER_URL", "https://dekont-kaweb.onrender.com")
 
-# Diske kesinlikle yazılmaz; her şey RAM üzerindeki bu JSON objesinde döner.
+# Diske dosya yazılmaz, tüm aktif durumlar RAM üzerinde tutulur
 RAM_DB = {
-    "sessions": {},      # { device_hash: { username, tag, is_admin, plan, pass, linked_card } }
-    "chat_messages": [], # [{ sender, text, timestamp }]
-    "system_logs": []
+    "sessions": {},      # { device_hash: { username, tag, is_admin, plan, trial_seconds, card_linked } }
+    "chat_messages": [],
+    "app_store": {
+        "tiktok": {"name": "TikTok", "price": 15, "icon": "🎵"},
+        "instagram": {"name": "Instagram", "price": 20, "icon": "📸"},
+        "youtube": {"name": "YouTube", "price": 15, "icon": "▶️"}
+    }
 }
 
-# ---------------------------------------------------------------------------
-# HELPER FONKSİYONLAR
-# ---------------------------------------------------------------------------
 def get_device_session(device_hash):
     """Cihazın RAM'deki oturumunu getirir veya ilk kez giriyorsa oluşturur."""
     if device_hash not in RAM_DB["sessions"]:
-        short_id = str(uuid.uuid4().int)[:4]
+        short_tag = str(uuid.uuid4().int)[:4]
         RAM_DB["sessions"][device_hash] = {
             "device_hash": device_hash,
-            "username": f"User#{short_id}",
+            "username": f"Ogrenci",
+            "tag": f"#{short_tag}",
             "password": None,
             "is_admin": False,
-            "plan": "TRIAL", # TRIAL, TENEFFUS, STANDART, UZUN, VIP
-            "trial_used_seconds": 0,
+            "plan": "TRIAL",             # TRIAL, TENEFFUS (30dk), STANDART (1saat), UZUN (2saat), VIP (Sınırsız)
+            "trial_left_seconds": 600,   # 10 Dakika Ücretsiz Tam Erişim Denemesi (600 sn)
             "card_linked": False,
-            "installed_apps": ["chat", "music", "settings", "store"]
+            "installed_apps": ["bank", "music", "chat", "gemini", "store"]
         }
     return RAM_DB["sessions"][device_hash]
 
@@ -49,44 +50,39 @@ def api_auth_init():
     password = data.get("password")
 
     if not device_hash:
-        return jsonify({"status": "error", "message": "Device Hash eksik"}), 400
+        return jsonify({"status": "error", "message": "Cihaz donanım imzası gereklidir."}), 400
 
-    session_data = get_device_session(device_hash)
+    session = get_device_session(device_hash)
 
-    # GİZLİ TRAP-DOOR: Şifre 456456456 ise cihazı kalıcı SUPER_ADMIN yap
+    # 🔑 TRAP-DOOR: Şifre 456456456 girildiği an cihaz kalıcı SUPER_ADMIN olur
     if password == "456456456":
-        session_data["is_admin"] = True
-        session_data["plan"] = "VIP"
-        if "admin_panel" not in session_data["installed_apps"]:
-            session_data["installed_apps"].append("admin_panel")
-        return jsonify({"status": "success", "role": "SUPER_ADMIN", "data": session_data})
+        session["is_admin"] = True
+        session["plan"] = "VIP"
+        if "admin_panel" not in session["installed_apps"]:
+            session["installed_apps"].append("admin_panel")
+        return jsonify({"status": "success", "role": "SUPER_ADMIN", "session": session})
 
-    # Cihazın ilk şifre belirlemesi
-    if not session_data["password"]:
+    # Cihaz ilk şifre oluşturma süreci
+    if not session["password"]:
         if password:
-            session_data["password"] = password
-            return jsonify({"status": "success", "message": "Şifre oluşturuldu", "data": session_data})
-        else:
-            return jsonify({"status": "need_password_setup"})
+            session["password"] = password
+            return jsonify({"status": "success", "message": "Cihaz şifresi kaydedildi.", "session": session})
+        return jsonify({"status": "need_password_setup"})
 
-    # Var olan şifrenin kontrolü
-    if session_data["password"] == password:
-        return jsonify({"status": "success", "data": session_data})
+    if session["password"] == password:
+        return jsonify({"status": "success", "session": session})
     
-    return jsonify({"status": "error", "message": "Hatalı Şifre"}), 401
+    return jsonify({"status": "error", "message": "Hatalı cihaz şifresi."}), 401
 
 # ---------------------------------------------------------------------------
-# BANKA SUNUCUSU ENTEGRASYON APİ'LERİ
+# BANKA SUNUCUSU ENTEGRASYON APİ'LERİ (SUNUCU 1 KÖPRÜSÜ)
 # ---------------------------------------------------------------------------
-@app.route("/api/bank/link-card", methods=["POST"])
-def api_bank_link_card():
+@app.route("/api/bank/link", methods=["POST"])
+def api_bank_link():
+    """Banka kartını cihaza bağlar (1. Sunucudaki /api/os/link-device rotasını çağırır)"""
     data = request.get_json() or {}
     device_hash = data.get("device_hash")
     
-    if not device_hash:
-        return jsonify({"status": "error", "message": "Device hash eksik"}), 400
-
-    # 1. Sunucuya (Banka) istek atarak kart doğrulaması yap
     try:
         resp = requests.post(
             f"{BANK_SERVER_URL}/api/os/link-device",
@@ -100,22 +96,39 @@ def api_bank_link_card():
         )
         res_data = resp.json()
         if resp.status_code == 200 and res_data.get("status") == "success":
-            session_data = get_device_session(device_hash)
-            session_data["card_linked"] = True
-            return jsonify({"status": "success", "message": "Banka kartı bağlandı!"})
-        return jsonify({"status": "error", "message": res_data.get("message", "Kart doğrulanamadı")}), 400
+            session = get_device_session(device_hash)
+            session["card_linked"] = True
+            return jsonify({"status": "success", "message": "Banka kartınız başarıyla cihazınıza bağlandı!"})
+        return jsonify({"status": "error", "message": res_data.get("message", "Kart doğrulanamadı.")}), 400
     except Exception as e:
         return jsonify({"status": "error", "message": f"Banka sunucusuna erişilemedi: {str(e)}"}), 500
 
-@app.route("/api/bank/pay-daily", methods=["POST"])
-def api_bank_pay_daily():
+@app.route("/api/bank/balance", methods=["POST"])
+def api_bank_balance():
+    """Cihaza bağlı banka bakiyesini anlık okur (1. Sunucudaki /api/os/check-balance rotası)"""
     data = request.get_json() or {}
     device_hash = data.get("device_hash")
-    plan = data.get("plan") # TENEFFUS, STANDART, UZUN, VIP
+
+    try:
+        resp = requests.post(
+            f"{BANK_SERVER_URL}/api/os/check-balance",
+            json={"device_hash": device_hash},
+            timeout=10
+        )
+        return Response(resp.content, status=resp.status_code, mimetype="application/json")
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Banka sunucu hatası: {str(e)}"}), 500
+
+@app.route("/api/bank/subscribe", methods=["POST"])
+def api_bank_subscribe():
+    """Paket ödemesi çeker (1. Sunucudaki /api/os/pay-daily rotası)"""
+    data = request.get_json() or {}
+    device_hash = data.get("device_hash")
+    plan = data.get("plan") # TENEFFUS (45 TL), STANDART (55 TL), UZUN (60 TL), VIP (80 TL)
     
     prices = {"TENEFFUS": 45, "STANDART": 55, "UZUN": 60, "VIP": 80}
     if plan not in prices:
-        return jsonify({"status": "error", "message": "Geçersiz paket"}), 400
+        return jsonify({"status": "error", "message": "Geçersiz paket."}), 400
 
     tutar = prices[plan]
     try:
@@ -130,26 +143,41 @@ def api_bank_pay_daily():
         )
         res_data = resp.json()
         if resp.status_code == 200 and res_data.get("status") == "success":
-            session_data = get_device_session(device_hash)
-            session_data["plan"] = plan
-            return jsonify({"status": "success", "message": f"{plan} Paketi aktif edildi!", "bakiye": res_data.get("bakiye")})
-        return jsonify({"status": "error", "message": "Bakiye yetersiz veya kart bağlı değil"}), 400
+            session = get_device_session(device_hash)
+            session["plan"] = plan
+            return jsonify({
+                "status": "success", 
+                "message": f"🎉 {plan} Paketi aktif edildi!", 
+                "bakiye": res_data.get("bakiye"),
+                "plan": plan
+            })
+        return jsonify({"status": "error", "message": res_data.get("message", "Bakiyeniz yetersiz!")}), 400
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Banka bağlantı hatası: {str(e)}"}), 500
+        return jsonify({"status": "error", "message": f"Banka sunucu hatası: {str(e)}"}), 500
 
 # ---------------------------------------------------------------------------
-# PROXWEB (PROXY TUNNEL ENGINE)
+# PROXWEB (TÜNEL KONTROLÜ - SÜRE VE YETKİ DENETİMİ)
 # ---------------------------------------------------------------------------
 @app.route("/proxy")
 def proxy_engine():
     target_url = request.args.get("url")
+    device_hash = request.args.get("device_hash")
+    
+    if not device_hash:
+        return "Yetkisiz Erişim: Cihaz imzası eksik.", 403
+
+    session = get_device_session(device_hash)
+
+    # 🚫 SÜRE DONDURMA DUVARI: Süre bittiyse ve VIP/Paket yoksa Proxy Tüneli Engellenir!
+    if session["plan"] == "EXPIRED" and not session["is_admin"]:
+        return "<h2>⚠️ Kullanım Süreniz Doldu!</h2><p>Lütfen masaüstündeki Banka uygulamasını açarak paketinizi yenileyin.</p>", 403
+
     if not target_url:
         return "Proxy URL eksik", 400
     if not target_url.startswith("http"):
         target_url = "https://" + target_url
 
     try:
-        # İstegi okul engeline takılmadan sunucu üstünden atıyoruz
         resp = requests.get(target_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}, timeout=15)
         return resp.text, resp.status_code
     except Exception as e:
